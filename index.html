@@ -1,0 +1,341 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0f766e">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>家計簿</title>
+<style>
+  :root {
+    --bg: #f5f5f4; --card: #ffffff; --text: #1c1917; --muted: #78716c;
+    --line: #e7e5e4; --accent: #0f766e; --accent-soft: #ccfbf1; --danger: #b91c1c;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1c1917; --card: #292524; --text: #f5f5f4; --muted: #a8a29e;
+      --line: #44403c; --accent: #2dd4bf; --accent-soft: #134e4a; --danger: #f87171;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sans JP", sans-serif;
+    font-size: 16px; line-height: 1.5;
+    padding: env(safe-area-inset-top) 0 calc(env(safe-area-inset-bottom) + 24px);
+  }
+  header {
+    position: sticky; top: 0; z-index: 10; background: var(--bg);
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 16px; border-bottom: 1px solid var(--line);
+  }
+  header h1 { font-size: 18px; margin: 0; }
+  .month-nav { display: flex; align-items: center; gap: 4px; }
+  .month-nav span { min-width: 92px; text-align: center; font-weight: 600; }
+  main { max-width: 640px; margin: 0 auto; padding: 16px; display: grid; gap: 16px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 16px; }
+  .card h2 { font-size: 15px; margin: 0 0 12px; color: var(--muted); font-weight: 600; }
+  button {
+    font: inherit; border: 0; border-radius: 10px; cursor: pointer;
+    background: transparent; color: var(--text); padding: 8px 12px;
+  }
+  .icon-btn { font-size: 20px; padding: 6px 12px; }
+  .primary { background: var(--accent); color: #fff; font-weight: 600; width: 100%; padding: 12px; }
+  @media (prefers-color-scheme: dark) { .primary { color: #042f2e; } }
+  .ghost { border: 1px solid var(--line); }
+  form { display: grid; gap: 12px; }
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  label { display: grid; gap: 4px; font-size: 13px; color: var(--muted); }
+  input, select {
+    font: inherit; font-size: 16px; color: var(--text); background: var(--bg);
+    border: 1px solid var(--line); border-radius: 10px; padding: 10px; width: 100%;
+  }
+  .amount-input { font-size: 22px; font-weight: 700; }
+  .cats { display: flex; flex-wrap: wrap; gap: 6px; }
+  .cats button { border: 1px solid var(--line); font-size: 14px; padding: 6px 10px; }
+  .cats button.on { background: var(--accent-soft); border-color: var(--accent); font-weight: 600; }
+  .total { font-size: 30px; font-weight: 800; margin: 0; }
+  .sub { color: var(--muted); font-size: 13px; margin: 2px 0 0; }
+  .bar-row { display: grid; grid-template-columns: 84px 1fr auto; align-items: center; gap: 8px; margin: 8px 0; font-size: 14px; }
+  .bar { height: 10px; border-radius: 5px; background: var(--line); overflow: hidden; }
+  .bar i { display: block; height: 100%; border-radius: 5px; }
+  .chart { display: flex; align-items: flex-end; gap: 4px; height: 160px; padding-top: 18px; }
+  .col { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; gap: 4px; }
+  .col .v { width: 100%; border-radius: 4px 4px 0 0; background: var(--line); min-height: 2px; position: relative; }
+  .col.cur .v { background: var(--accent); }
+  .col small { font-size: 10px; color: var(--muted); }
+  .col .lbl { font-size: 9px; color: var(--muted); white-space: nowrap; }
+  ul.list { list-style: none; margin: 0; padding: 0; }
+  ul.list li { display: grid; grid-template-columns: 1fr auto auto; gap: 8px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--line); }
+  ul.list li:last-child { border-bottom: 0; }
+  .meta { font-size: 12px; color: var(--muted); }
+  .amt { font-weight: 700; white-space: nowrap; }
+  .del { color: var(--danger); font-size: 13px; padding: 4px 8px; }
+  .empty { color: var(--muted); text-align: center; padding: 12px 0; margin: 0; }
+  .tools { display: flex; gap: 8px; flex-wrap: wrap; }
+  .tools button { flex: 1; }
+  .toast {
+    position: fixed; left: 50%; bottom: calc(env(safe-area-inset-bottom) + 20px); transform: translateX(-50%);
+    background: var(--text); color: var(--bg); padding: 10px 16px; border-radius: 999px;
+    font-size: 14px; opacity: 0; transition: opacity .2s; pointer-events: none;
+  }
+  .toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+<header>
+  <h1>家計簿</h1>
+  <div class="month-nav">
+    <button class="icon-btn" id="prev" aria-label="前の月">‹</button>
+    <span id="monthLabel"></span>
+    <button class="icon-btn" id="next" aria-label="次の月">›</button>
+  </div>
+</header>
+
+<main>
+  <section class="card">
+    <h2>支出を入力</h2>
+    <form id="form">
+      <label>金額（円）
+        <input class="amount-input" id="amount" type="number" inputmode="numeric" min="1" step="1" placeholder="0" required>
+      </label>
+      <div>
+        <label style="margin-bottom:6px">カテゴリ</label>
+        <div class="cats" id="cats"></div>
+      </div>
+      <div class="row">
+        <label>日付 <input id="date" type="date" required></label>
+        <label>メモ <input id="memo" type="text" placeholder="任意" maxlength="40"></label>
+      </div>
+      <button class="primary" type="submit">追加する</button>
+    </form>
+  </section>
+
+  <section class="card">
+    <h2 id="totalTitle">今月の支出</h2>
+    <p class="total" id="total">¥0</p>
+    <p class="sub" id="totalSub"></p>
+  </section>
+
+  <section class="card">
+    <h2>カテゴリ別</h2>
+    <div id="breakdown"></div>
+  </section>
+
+  <section class="card">
+    <h2>月ごとの支出（直近12か月）</h2>
+    <div class="chart" id="chart"></div>
+  </section>
+
+  <section class="card">
+    <h2>明細</h2>
+    <ul class="list" id="list"></ul>
+  </section>
+
+  <section class="card">
+    <h2>データ</h2>
+    <div class="tools">
+      <button class="ghost" id="exportBtn">CSVで保存</button>
+      <button class="ghost" id="importBtn">CSVを読み込む</button>
+      <input type="file" id="importFile" accept=".csv,text/csv" hidden>
+    </div>
+    <p class="sub" style="margin-top:10px">データはこの端末のブラウザ内に保存されます。機種変更や別の端末に移すときはCSVで保存してください。</p>
+  </section>
+</main>
+<div class="toast" id="toast"></div>
+
+<script>
+(() => {
+  const KEY = 'kakeibo.entries.v1';
+  const CATEGORIES = [
+    { name: '食費', color: '#f97316' },
+    { name: '日用品', color: '#eab308' },
+    { name: '交通', color: '#3b82f6' },
+    { name: '住居', color: '#8b5cf6' },
+    { name: '水道光熱', color: '#06b6d4' },
+    { name: '通信', color: '#6366f1' },
+    { name: '交際', color: '#ec4899' },
+    { name: '趣味', color: '#22c55e' },
+    { name: '医療', color: '#ef4444' },
+    { name: 'その他', color: '#78716c' },
+  ];
+  const colorOf = (c) => (CATEGORIES.find(x => x.name === c) || CATEGORIES.at(-1)).color;
+  const yen = (n) => '¥' + Math.round(n).toLocaleString('ja-JP');
+  const $ = (id) => document.getElementById(id);
+  const pad = (n) => String(n).padStart(2, '0');
+  const ymOf = (d) => d.slice(0, 7);
+  const todayStr = () => { const d = new Date(); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; };
+
+  let entries = load();
+  let selectedCat = CATEGORIES[0].name;
+  let viewYM = todayStr().slice(0, 7);
+
+  function load() {
+    try { const v = JSON.parse(localStorage.getItem(KEY)); return Array.isArray(v) ? v : []; }
+    catch { return []; }
+  }
+  function save() {
+    try { localStorage.setItem(KEY, JSON.stringify(entries)); }
+    catch { toast('保存できませんでした'); }
+  }
+  function toast(msg) {
+    const t = $('toast'); t.textContent = msg; t.classList.add('show');
+    clearTimeout(toast.timer); toast.timer = setTimeout(() => t.classList.remove('show'), 1800);
+  }
+  function shiftYM(ym, delta) {
+    const [y, m] = ym.split('-').map(Number);
+    const d = new Date(y, m - 1 + delta, 1);
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}`;
+  }
+  const labelYM = (ym) => { const [y, m] = ym.split('-'); return `${y}年${Number(m)}月`; };
+
+  function renderCats() {
+    $('cats').innerHTML = '';
+    for (const c of CATEGORIES) {
+      const b = document.createElement('button');
+      b.type = 'button'; b.textContent = c.name;
+      b.className = c.name === selectedCat ? 'on' : '';
+      b.onclick = () => { selectedCat = c.name; renderCats(); };
+      $('cats').appendChild(b);
+    }
+  }
+
+  function render() {
+    $('monthLabel').textContent = labelYM(viewYM);
+    const month = entries.filter(e => ymOf(e.date) === viewYM);
+    const total = month.reduce((s, e) => s + e.amount, 0);
+    const isCurrent = viewYM === todayStr().slice(0, 7);
+    $('totalTitle').textContent = isCurrent ? '今月の支出' : `${labelYM(viewYM)}の支出`;
+    $('total').textContent = yen(total);
+    const prevTotal = entries.filter(e => ymOf(e.date) === shiftYM(viewYM, -1)).reduce((s, e) => s + e.amount, 0);
+    let sub = `${month.length}件`;
+    if (prevTotal > 0) {
+      const diff = total - prevTotal;
+      sub += ` ・ 前月比 ${diff >= 0 ? '+' : '−'}${yen(Math.abs(diff))}`;
+    }
+    $('totalSub').textContent = sub;
+
+    // カテゴリ別
+    const byCat = {};
+    for (const e of month) byCat[e.category] = (byCat[e.category] || 0) + e.amount;
+    const cats = Object.entries(byCat).sort((a, b) => b[1] - a[1]);
+    const bd = $('breakdown'); bd.innerHTML = '';
+    if (!cats.length) bd.innerHTML = '<p class="empty">まだ支出がありません</p>';
+    for (const [name, sum] of cats) {
+      const pct = total ? sum / total * 100 : 0;
+      const row = document.createElement('div'); row.className = 'bar-row';
+      row.innerHTML = `<span></span><div class="bar"><i></i></div><span class="amt"></span>`;
+      row.children[0].textContent = name;
+      const i = row.querySelector('i'); i.style.width = pct + '%'; i.style.background = colorOf(name);
+      row.children[2].textContent = `${yen(sum)}（${Math.round(pct)}%）`;
+      bd.appendChild(row);
+    }
+
+    // 月ごとのグラフ
+    const months = Array.from({ length: 12 }, (_, k) => shiftYM(viewYM, k - 11));
+    const sums = months.map(ym => entries.filter(e => ymOf(e.date) === ym).reduce((s, e) => s + e.amount, 0));
+    const max = Math.max(...sums, 1);
+    const ch = $('chart'); ch.innerHTML = '';
+    months.forEach((ym, k) => {
+      const col = document.createElement('div');
+      col.className = 'col' + (ym === viewYM ? ' cur' : '');
+      const short = sums[k] >= 10000 ? (sums[k] / 10000).toFixed(sums[k] >= 100000 ? 0 : 1) + '万' : (sums[k] ? Math.round(sums[k] / 1000) + '千' : '');
+      col.innerHTML = `<small>${short}</small><div class="v" style="height:${sums[k] / max * 100}%"></div><span class="lbl">${Number(ym.slice(5))}月</span>`;
+      col.title = `${labelYM(ym)}: ${yen(sums[k])}`;
+      col.onclick = () => { viewYM = ym; render(); };
+      ch.appendChild(col);
+    });
+
+    // 明細
+    const list = $('list'); list.innerHTML = '';
+    const sorted = [...month].sort((a, b) => b.date.localeCompare(a.date) || b.createdAt - a.createdAt);
+    if (!sorted.length) list.innerHTML = '<li style="display:block"><p class="empty">明細はありません</p></li>';
+    for (const e of sorted) {
+      const li = document.createElement('li');
+      li.innerHTML = `<div><div class="t"></div><div class="meta"></div></div><span class="amt"></span><button class="del">削除</button>`;
+      li.querySelector('.t').textContent = e.memo || e.category;
+      li.querySelector('.meta').textContent = `${Number(e.date.slice(5, 7))}/${Number(e.date.slice(8))} ・ ${e.category}`;
+      li.querySelector('.meta').style.borderLeft = `3px solid ${colorOf(e.category)}`;
+      li.querySelector('.meta').style.paddingLeft = '6px';
+      li.querySelector('.amt').textContent = yen(e.amount);
+      li.querySelector('.del').onclick = () => {
+        if (!confirm(`${e.memo || e.category} ${yen(e.amount)} を削除しますか？`)) return;
+        entries = entries.filter(x => x.id !== e.id); save(); render(); toast('削除しました');
+      };
+      list.appendChild(li);
+    }
+  }
+
+  $('form').addEventListener('submit', (ev) => {
+    ev.preventDefault();
+    const amount = Math.round(Number($('amount').value));
+    if (!(amount > 0)) { toast('金額を入力してください'); return; }
+    const date = $('date').value || todayStr();
+    entries.push({
+      id: (crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random())),
+      date, amount, category: selectedCat, memo: $('memo').value.trim(), createdAt: Date.now(),
+    });
+    save();
+    viewYM = ymOf(date);
+    $('amount').value = ''; $('memo').value = '';
+    render(); toast(`${selectedCat} ${yen(amount)} を追加しました`);
+  });
+
+  $('prev').onclick = () => { viewYM = shiftYM(viewYM, -1); render(); };
+  $('next').onclick = () => { viewYM = shiftYM(viewYM, 1); render(); };
+
+  // CSV
+  const csvCell = (s) => /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  $('exportBtn').onclick = () => {
+    if (!entries.length) { toast('データがありません'); return; }
+    const rows = [['日付', '金額', 'カテゴリ', 'メモ']]
+      .concat([...entries].sort((a, b) => a.date.localeCompare(b.date)).map(e => [e.date, String(e.amount), e.category, e.memo || '']));
+    const csv = '﻿' + rows.map(r => r.map(csvCell).join(',')).join('\n');
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+    a.download = `kakeibo-${todayStr()}.csv`; a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  };
+  function parseCSV(text) {
+    const rows = []; let row = [], cell = '', q = false;
+    text = text.replace(/^﻿/, '');
+    for (let i = 0; i < text.length; i++) {
+      const c = text[i];
+      if (q) {
+        if (c === '"' && text[i + 1] === '"') { cell += '"'; i++; }
+        else if (c === '"') q = false;
+        else cell += c;
+      } else if (c === '"') q = true;
+      else if (c === ',') { row.push(cell); cell = ''; }
+      else if (c === '\n' || c === '\r') {
+        if (c === '\r' && text[i + 1] === '\n') i++;
+        row.push(cell); rows.push(row); row = []; cell = '';
+      } else cell += c;
+    }
+    if (cell || row.length) { row.push(cell); rows.push(row); }
+    return rows;
+  }
+  $('importBtn').onclick = () => $('importFile').click();
+  $('importFile').onchange = async (ev) => {
+    const file = ev.target.files[0]; if (!file) return;
+    const rows = parseCSV(await file.text()).filter(r => /^\d{4}-\d{2}-\d{2}$/.test(r[0]) && Number(r[1]) > 0);
+    const seen = new Set(entries.map(e => `${e.date}|${e.amount}|${e.category}|${e.memo || ''}`));
+    let added = 0;
+    for (const [date, amt, category, memo = ''] of rows) {
+      const k = `${date}|${Math.round(Number(amt))}|${category}|${memo}`;
+      if (seen.has(k)) continue;
+      seen.add(k);
+      entries.push({ id: String(Date.now()) + '-' + added, date, amount: Math.round(Number(amt)), category: category || 'その他', memo, createdAt: Date.now() + added });
+      added++;
+    }
+    save(); render(); ev.target.value = '';
+    toast(`${added}件を読み込みました`);
+  };
+
+  $('date').value = todayStr();
+  renderCats();
+  render();
+})();
+</script>
+</body>
+</html>
